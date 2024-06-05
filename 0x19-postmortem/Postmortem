@@ -1,0 +1,41 @@
+# Postmortem
+
+Following the release of ALX's System Engineering & DevOps project 0x19, around 06:00 East Africa Time (EAT) in Rwanda, a disruption unfolded within an isolated Ubuntu 14.04 container hosting an Apache web server. Requests made to the server resulted in a cascade of `500 Internal Server Error` responses, contrary to the expected outcome of serving an HTML file defining a basic Holberton WordPress site.
+
+## Debugging Process
+
+Brennan, colloquially known as BDB, encountered the anomaly at approximately 19:20 PST upon undertaking the task to rectify it. Here's an account of the steps taken to address the issue:
+
+1. Inspection of running processes through `ps aux` revealed two `apache2` processes, namely `root` and `www-data`, functioning as intended.
+
+2. Exploration of the `sites-available` directory within `/etc/apache2/` unveiled that the web server was indeed serving content located in `/var/www/html/`.
+
+3. A series of actions ensued, including the execution of `strace` on the PID of the `root` Apache process while simultaneously curling the server. Anticipation was high, yet the outcome proved disappointing as `strace` yielded no actionable insights.
+
+4. Undeterred, a repetition of the previous step targeting the `www-data` process yielded a breakthrough. `strace` surfaced an `-1 ENOENT (No such file or directory)` error upon attempting to access the file `/var/www/html/wp-includes/class-wp-locale.phpp`.
+
+5. Meticulous examination of files within the `/var/www/html/` directory ensued, employing Vim's pattern matching capabilities to identify the aberrant `.phpp` file extension. The anomaly was pinpointed within the `wp-settings.php` file (Line 137: `require_once( ABSPATH . WPINC . '/class-wp-locale.php' );`).
+
+6. The corrective action involved the removal of the extraneous `p` from the line.
+
+7. Validation of the fix was conducted through another `curl` request to the server, which returned a satisfactory `200 OK` response.
+
+8. To fortify against similar occurrences, a Puppet manifest was authored to automate the resolution process.
+
+## Summation
+
+In essence, the root cause of the issue boiled down to a typographical error. Specifically, the WordPress application encountered a critical stumbling block within `wp-settings.php` when attempting to access the nonexistent file `class-wp-locale.phpp`. The correct file, residing in the `wp-content` directory of the application, bore the appellation `class-wp-locale.php`.
+
+The solution entailed a straightforward correction of the typo by excising the trailing `p`.
+
+## Prevention
+
+Contrary to initial assumptions, the outage stemmed not from a web server malfunction but rather an application glitch. To forestall similar disruptions in the future, the following strategies are advised:
+
+* Rigorous testing: Prior to deployment, exhaustively test the application. Early detection of the error could have averted prolonged downtime.
+
+* Status monitoring: Implement an uptime monitoring service such as UptimeRobot to promptly notify stakeholders of website outages.
+
+It's noteworthy that in response to this incident, a Puppet manifest titled [0-strace_is_your_friend.pp](https://github.com/bdbaraban/holberton-system_engineering-devops/blob/master/0x17-web_stack_debugging_3/0-strace_is_your_friend.pp) was crafted to automate the rectification of identical errors should they recur in the future. The manifest systematically replaces any `phpp` extensions within the file `/var/www/html/wp-settings.php` with `php`.
+
+However, rest assured, such occurrences are destined to be relegated to the annals of history, for we programmers are impervious to errors! :wink:
